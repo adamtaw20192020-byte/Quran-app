@@ -8,7 +8,7 @@ workflows:
       - name: Generate Android platform files
         script: |
           rm -rf android
-          flutter create --platforms=android --overwrite .
+          flutter create --platforms=android .
           ls -la android
       - name: Get Flutter packages
         script: |
