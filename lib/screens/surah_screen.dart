@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/surah.dart';
 import '../models/ayah.dart';
-import '../services/quran_api.dart';
-import '../widgets/ayah_card.dart';
+import '../services/quran_api_service.dart';
+import '../services/bookmark_service.dart';
 import '../widgets/audio_player_bar.dart';
 
 class SurahScreen extends StatefulWidget {
@@ -15,10 +15,12 @@ class SurahScreen extends StatefulWidget {
 
 class _SurahScreenState extends State<SurahScreen> {
   final QuranApiService _api = QuranApiService();
+  final BookmarkService _bookmarkService = BookmarkService();
   List<Ayah> _ayahs = [];
   bool _isLoading = true;
   String? _errorMessage;
   bool _showTranslation = true;
+  Set<int> _bookmarkedNumbers = {};
 
   @override
   void initState() {
@@ -36,8 +38,15 @@ class _SurahScreenState extends State<SurahScreen> {
         widget.surah.number,
         withTranslation: _showTranslation,
       );
+      final bookmarked = <int>{};
+      for (final a in ayahs) {
+        if (await _bookmarkService.isBookmarked(a)) {
+          bookmarked.add(a.numberInSurah);
+        }
+      }
       setState(() {
         _ayahs = ayahs;
+        _bookmarkedNumbers = bookmarked;
         _isLoading = false;
       });
     } catch (e) {
@@ -85,7 +94,10 @@ class _SurahScreenState extends State<SurahScreen> {
               const SizedBox(height: 12),
               Text(_errorMessage!, textAlign: TextAlign.center),
               const SizedBox(height: 16),
-              FilledButton(onPressed: _load, child: const Text('إعادة المحاولة')),
+              FilledButton(
+                onPressed: _load,
+                child: const Text('إعادة المحاولة'),
+              ),
             ],
           ),
         ),
@@ -96,10 +108,73 @@ class _SurahScreenState extends State<SurahScreen> {
       children: [
         AudioPlayerBar(surahNumber: widget.surah.number),
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            itemCount: _ayahs.length,
-            itemBuilder: (context, index) => AyahCard(ayah: _ayahs[index]),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Directionality(
+              textDirection: TextDirection.rtl,
+              child: Text.rich(
+                TextSpan(
+                  children: _ayahs.expand((ayah) {
+                    final isBookmarked =
+                        _bookmarkedNumbers.contains(ayah.numberInSurah);
+                    return [
+                      TextSpan(
+                        text: '${ayah.text} ',
+                        style: const TextStyle(fontSize: 22, height: 1.9),
+                      ),
+                      WidgetSpan(
+                        alignment: PlaceholderAlignment.middle,
+                        child: GestureDetector(
+                          onTap: () async {
+                            await _bookmarkService.toggleBookmark(ayah);
+                            setState(() {
+                              if (isBookmarked) {
+                                _bookmarkedNumbers.remove(ayah.numberInSurah);
+                              } else {
+                                _bookmarkedNumbers.add(ayah.numberInSurah);
+                              }
+                            });
+                          },
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isBookmarked
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context)
+                                      .colorScheme
+                                      .primaryContainer,
+                            ),
+                            child: Text(
+                              '${ayah.numberInSurah}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isBookmarked ? Colors.white : null,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (_showTranslation &&
+                          ayah.translation != null &&
+                          ayah.translation!.isNotEmpty)
+                        TextSpan(
+                          text: '\n${ayah.translation}\n\n',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontStyle: FontStyle.italic,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        )
+                      else
+                        const TextSpan(text: '  '),
+                    ];
+                  }).toList(),
+                ),
+              ),
+            ),
           ),
         ),
       ],
